@@ -94,7 +94,7 @@ async function loadCloudPhotos() {
   const galleryPhotos = new Map();
   data.forEach((item) => {
     const match = item.file_name.match(/^gallery-slot-(\d+)-/);
-    if (match && !galleryPhotos.has(match[1])) galleryPhotos.set(match[1], item);
+    if (match && !galleryPhotos.has(String(Number(match[1])))) galleryPhotos.set(String(Number(match[1])), item);
   });
   galleryPhotos.forEach((item, slot) => {
     const image = document.querySelector(`[data-gallery-photo="${slot}"]`);
@@ -162,10 +162,10 @@ const galleryMetadata = JSON.parse(localStorage.getItem('blue-room-gallery-metad
 const customGalleryCount = document.querySelector('#customGalleryCount');
 const featuredPhotoCountInput = document.querySelector('#featuredPhotoCount');
 if (!localStorage.getItem('blue-room-featured-count-initialized')) {
-  localStorage.setItem('blue-room-featured-count', '10');
+  localStorage.setItem('blue-room-featured-count', '4');
   localStorage.setItem('blue-room-featured-count-initialized', '1');
 }
-let featuredPhotoCount = Number(localStorage.getItem('blue-room-featured-count') || 10);
+let featuredPhotoCount = Math.min(4, Math.max(1, Number(localStorage.getItem('blue-room-featured-count') || 4)));
 const defaultGallerySources = [
   'https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=800&q=88',
   'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=88',
@@ -186,7 +186,7 @@ function ensureGallerySlots(count) {
   galleryPhotoImages = [...document.querySelectorAll('[data-gallery-photo]')];
 }
 
-ensureGallerySlots(Math.min(200, Math.max(20, featuredPhotoCount)));
+ensureGallerySlots(Math.min(4, Math.max(1, featuredPhotoCount)));
 const centerCard = document.querySelector('.center-card');
 const centerMedia = document.querySelector('#centerMedia');
 const centerTitle = document.querySelector('#centerTitle');
@@ -377,11 +377,11 @@ function updateGalleryFilterCounts() {
 }
 
 function applyFeaturedPhotoCount() {
-  featuredPhotoCount = Math.min(200, Math.max(1, Number(featuredPhotoCountInput.value) || 20));
+  featuredPhotoCount = Math.min(4, Math.max(1, Number(featuredPhotoCountInput.value) || 4));
   featuredPhotoCountInput.value = featuredPhotoCount;
   localStorage.setItem('blue-room-featured-count', String(featuredPhotoCount));
   const galleryNote = document.querySelector('.gallery-note');
-  if (galleryNote) galleryNote.firstChild.textContent = `${featuredPhotoCount} / 200`;
+  if (galleryNote) galleryNote.firstChild.textContent = `${featuredPhotoCount} / 4`;
   galleryPhotoImages.forEach((image, index) => {
     image.closest('.gallery-item').hidden = index >= featuredPhotoCount;
   });
@@ -410,7 +410,7 @@ function closeLightbox() {
 function renderCustomGallery() {
   const grid = document.querySelector('#customGalleryGrid');
   grid.replaceChildren();
-  customGalleryCount.textContent = `${customGallery.length} / 200 张 · 第 21 张起自动向下延伸`;
+  customGalleryCount.textContent = `${customGallery.length} / 200 张 · 第 5 张起自动向下延伸`;
   for (let groupStart = 0; groupStart < customGallery.length; groupStart += 4) {
     const group = customGallery.slice(groupStart, groupStart + 4);
     const item = document.createElement('article');
