@@ -84,18 +84,31 @@ function appendMessage(name, text, createdAt, showToast) {
 async function loadCloudPhotos() {
   const { data, error } = await supabaseClient
     .from('guest_photos')
-    .select('file_name, image_url')
+    .select('file_name, image_url, created_at')
     .order('created_at', { ascending: false });
   if (error) {
     console.error('无法加载照片:', error.message);
     return;
   }
   guestPhotoGrid.querySelectorAll('.cloud-photo').forEach((item) => item.remove());
-  if (data.length) guestEmpty.hidden = true;
-  data.forEach((item) => appendCloudPhoto(item.file_name, item.image_url));
-  guestPhotoTotal = data.length;
+  const galleryPhotos = new Map();
+  data.forEach((item) => {
+    const match = item.file_name.match(/^gallery-slot-(\d+)-/);
+    if (match && !galleryPhotos.has(match[1])) galleryPhotos.set(match[1], item);
+  });
+  galleryPhotos.forEach((item, slot) => {
+    const image = document.querySelector(`[data-gallery-photo="${slot}"]`);
+    if (image) {
+      image.src = item.image_url;
+      localStorage.removeItem(`blue-room-gallery-${slot}`);
+    }
+  });
+  const publicPhotos = data.filter((item) => !item.file_name.startsWith('gallery-slot-'));
+  if (publicPhotos.length) guestEmpty.hidden = true;
+  publicPhotos.forEach((item) => appendCloudPhoto(item.file_name, item.image_url));
+  guestPhotoTotal = publicPhotos.length;
   guestPhotoCount.textContent = `${guestPhotoTotal} 张照片`;
-  updateWaterfallWithCommunityPhotos(data);
+  updateWaterfallWithCommunityPhotos([...galleryPhotos.values(), ...publicPhotos]);
 }
 
 function updateWaterfallWithCommunityPhotos(photos) {
@@ -510,21 +523,41 @@ backgroundLibraryInput.addEventListener('change', async (event) => {
 });
 
 document.querySelectorAll('[data-gallery-input]').forEach((input) => {
-  input.addEventListener('change', (event) => {
+  input.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      const photoId = input.dataset.galleryInput;
-      const image = document.querySelector(`[data-gallery-photo="${photoId}"]`);
-      if (!image) return;
-      image.src = reader.result;
-      localStorage.setItem(`blue-room-gallery-${photoId}`, reader.result);
-      toast.textContent = `展览照片 ${photoId} 已换好 ✦`;
+    const photoId = input.dataset.galleryInput.padStart(2, '0');
+    const filePath = `gallery-slot-${photoId}-${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
+    const { error: uploadError } = await supabaseClient.storage
+      .from('guest-photos')
+      .upload(filePath, file, { cacheControl: '3600', upsert: false, contentType: file.type });
+    if (uploadError) {
+      toast.textContent = `第 ${photoId} 张上传失败：${uploadError.message}`;
       toast.classList.add('show');
-      window.setTimeout(() => toast.classList.remove('show'), 2200);
+      window.setTimeout(() => toast.classList.remove('show'), 3000);
+      input.value = '';
+      return;
+    }
+    const { data: publicUrlData } = supabaseClient.storage.from('guest-photos').getPublicUrl(filePath);
+    const imageUrl = publicUrlData.publicUrl;
+    const { error: recordError } = await supabaseClient.from('guest_photos').insert({
+      file_name: `gallery-slot-${photoId}-${file.name}`,
+      image_url: imageUrl
     });
-    reader.readAsDataURL(file);
+    if (recordError) {
+      toast.textContent = `第 ${photoId} 张保存失败：${recordError.message}`;
+      toast.classList.add('show');
+      window.setTimeout(() => toast.classList.remove('show'), 3000);
+      input.value = '';
+      return;
+    }
+    const image = document.querySelector(`[data-gallery-photo="${Number(photoId)}"]`);
+    if (image) image.src = imageUrl;
+    localStorage.removeItem(`blue-room-gallery-${Number(photoId)}`);
+    await loadCloudPhotos();
+    toast.textContent = `第 ${photoId} 张已上传，所有访客都能看到 ✦`;
+    toast.classList.add('show');
+    window.setTimeout(() => toast.classList.remove('show'), 2200);
     input.value = '';
   });
 });
